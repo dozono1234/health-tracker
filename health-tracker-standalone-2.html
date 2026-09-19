@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>健康記録</title>
+<style>
+  :root{
+    --bg:#f7f7f8; --card:#ffffff; --text:#1a1a1a; --sub:#6b6b6b;
+    --border:#e4e4e7; --accent:#2563eb; --accent-weak:#eaf1ff;
+    --danger:#dc2626; --danger-weak:#fde8e8; --shadow:0 1px 3px rgba(0,0,0,.08);
+    --weight:#2563eb; --glucose:#dc7a11; --bp:#16a34a; --hba1c:#9333ea;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#17181a; --card:#232426; --text:#f0f0f0; --sub:#9a9a9a;
+      --border:#35363a; --accent:#5b8dfb; --accent-weak:#1d2b4d;
+      --danger:#f87171; --danger-weak:#3a1d1d; --shadow:0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;padding-bottom:90px;}
+  header{position:sticky;top:0;background:var(--bg);padding:16px 16px 8px;z-index:5;}
+  h1{font-size:19px;margin:0 0 2px;}
+  .sub{color:var(--sub);font-size:12.5px;}
+  main{padding:8px 16px 16px;max-width:640px;margin:0 auto;}
+  section{margin-top:18px;}
+  h2{font-size:14px;color:var(--sub);margin:0 0 8px;font-weight:600;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:12px;}
+  .chart-grid{display:grid;grid-template-columns:1fr;gap:10px;}
+  @media (min-width:520px){ .chart-grid{grid-template-columns:1fr 1fr;} }
+  .chart-card{padding:10px 10px 6px;}
+  .chart-title{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px;margin-bottom:2px;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+  canvas{width:100%;display:block;}
+  .empty{color:var(--sub);font-size:12px;text-align:center;padding:24px 4px;}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-bottom:1px solid var(--border);gap:8px;}
+  .row:last-child{border-bottom:none;}
+  .row .date{font-size:12.5px;color:var(--sub);width:74px;flex-shrink:0;}
+  .row .vals{flex:1;font-size:13.5px;display:flex;flex-wrap:wrap;gap:6px;}
+  .tag{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 6px;font-size:12px;white-space:nowrap;}
+  .row .actions{display:flex;gap:4px;flex-shrink:0;}
+  .iconbtn{border:none;background:none;color:var(--sub);font-size:15px;padding:4px 6px;cursor:pointer;border-radius:8px;}
+  .iconbtn:active{background:var(--border);}
+  .fab{position:fixed;right:18px;bottom:22px;background:var(--accent);color:#fff;border:none;border-radius:28px;padding:14px 20px;font-size:14.5px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;z-index:10;}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:20;display:flex;align-items:flex-end;justify-content:center;}
+  .sheet{background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:18px 18px 24px;max-height:88vh;overflow-y:auto;}
+  .sheet h3{margin:0 0 12px;font-size:16px;}
+  label{display:block;font-size:12.5px;color:var(--sub);margin:12px 0 4px;}
+  input[type=date],input[type=number],input[type=text]{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:15px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .btnrow{display:flex;gap:8px;margin-top:18px;}
+  button.primary{flex:1;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14.5px;font-weight:600;cursor:pointer;}
+  button.secondary{flex:1;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14.5px;cursor:pointer;}
+  button:disabled{opacity:.5;}
+  button.deletebtn{background:var(--danger-weak);color:var(--danger);border:none;border-radius:10px;padding:10px;font-size:13.5px;width:100%;margin-top:10px;cursor:pointer;}
+  .notice{font-size:12px;color:var(--sub);text-align:center;margin-top:8px;min-height:14px;}
+  .thumb{width:100%;max-height:160px;object-fit:contain;border-radius:10px;margin-top:8px;background:var(--bg);}
+  .banner{font-size:12.5px;color:var(--sub);text-align:center;padding:30px 10px;}
+  #printArea{position:fixed;left:-9999px;top:0;width:760px;background:#ffffff;color:#111111;padding:24px;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;}
+  @media print{
+    body > *:not(#printArea){display:none !important;}
+    #printArea{position:static !important;left:auto !important;width:auto !important;padding:0 !important;}
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>健康記録</h1>
+  <div class="sub">体重・血糖値・血圧・HbA1c(この端末に保存)</div>
+</header>
+<main id="app">
+  <section>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+      <h2 style="margin:0;">グラフ</h2>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button class="iconbtn" id="prevYear" style="border:1px solid var(--border);">«</button>
+        <button class="iconbtn" id="prevPeriod" style="border:1px solid var(--border);">‹</button>
+        <span id="periodLabel" style="font-size:12px;color:var(--sub);white-space:nowrap;"></span>
+        <button class="iconbtn" id="nextPeriod" style="border:1px solid var(--border);">›</button>
+        <button class="iconbtn" id="nextYear" style="border:1px solid var(--border);">»</button>
+      </div>
+    </div>
+    <div class="chart-grid" id="chartGrid"></div>
+  </section>
+  <section>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+      <h2 style="margin:0;">記録一覧</h2>
+      <div style="display:flex;gap:6px;">
+        <button class="iconbtn" id="importBtn" style="border:1px solid var(--border);font-size:12px;">CSVを取り込む</button>
+        <button class="iconbtn" id="exportBtn" style="border:1px solid var(--border);font-size:12px;">CSVで書き出す</button>
+        <button class="iconbtn" id="pdfBtn" style="border:1px solid var(--border);font-size:12px;">PDFで出力</button>
+      </div>
+      <input type="file" id="importFile" accept=".csv,text/csv" style="display:none;">
+    </div>
+    <div class="card" id="listCard" style="margin-top:8px;"></div>
+  </section>
+</main>
+<button class="fab" id="addBtn">＋ 記録を追加</button>
+<div id="printArea"></div>
+
+<script>
+const STORAGE_KEY = 'health_records_v1';
+let records = [];
+let editingId = null;
+let attachedPhotoDataUrl = null;
+let windowStart = { year: new Date().getFullYear(), month: 1 }; // グラフ表示期間の開始(既定=今年1月)
+
+const FIELD_META = [
+  {key:'weight', label:'体重', unit:'kg', varName:'--weight'},
+  {key:'glucose', label:'血糖値', unit:'mg/dL', varName:'--glucose', forceStep:10, refMin:70, refMax:109},
+  {key:'bp', label:'血圧', unit:'mmHg', varName:'--bp', forceStep:10},
+  {key:'hba1c', label:'HbA1c', unit:'%', varName:'--hba1c', refMin:4.9, refMax:6},
+];
+
+function todayStr(){
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+
+function loadRecords(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    records = raw ? JSON.parse(raw) : [];
+  }catch(e){ records = []; }
+}
+function persist(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    return true;
+  }catch(e){
+    alert('保存に失敗しました(容量が上限に達した可能性があります。写真添付を減らしてください)。');
+    return false;
+  }
+}
+
+function init(){
+  loadRecords();
+  document.getElementById('addBtn').onclick = () => openForm(null);
+  document.getElementById('exportBtn').onclick = exportCsv;
+  document.getElementById('importBtn').onclick = ()=> document.getElementById('importFile').click();
+  document.getElementById('importFile').onchange = importCsv;
+  document.getElementById('pdfBtn').onclick = exportPdf;
+  document.getElementById('prevPeriod').onclick = ()=>{ windowStart = shiftMonths(windowStart, -1); renderCharts(); };
+  document.getElementById('nextPeriod').onclick = ()=>{ windowStart = clampToDefault(shiftMonths(windowStart, 1)); renderCharts(); };
+  document.getElementById('prevYear').onclick = ()=>{ windowStart = shiftMonths(windowStart, -12); renderCharts(); };
+  document.getElementById('nextYear').onclick = ()=>{ windowStart = clampToDefault(shiftMonths(windowStart, 12)); renderCharts(); };
+  renderList();
+  renderCharts();
+}
+
+function fmtVals(r){
+  const out = [];
+  if(r.weight!=null) out.push('体重 '+r.weight+'kg');
+  if(r.glucose!=null) out.push('血糖 '+r.glucose+'mg/dL');
+  if(r.systolic!=null || r.diastolic!=null) out.push('血圧 '+(r.systolic??'-')+'/'+(r.diastolic??'-'));
+  if(r.hba1c!=null) out.push('HbA1c '+r.hba1c+'%');
+  return out;
+}
+
+function renderList(){
+  const el = document.getElementById('listCard');
+  const sorted = [...records].sort((a,b)=> a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+  if(sorted.length===0){
+    el.innerHTML = '<div class="empty">まだ記録がありません。右下の「＋ 記録を追加」から始めましょう。</div>';
+    return;
+  }
+  el.innerHTML = sorted.map(r=>{
+    const vals = fmtVals(r).map(v=>'<span class="tag">'+v+'</span>').join('');
+    return '<div class="row" data-id="'+r.id+'">'
+      + '<div class="date">'+r.date+'</div>'
+      + '<div class="vals">'+(vals || '<span class="tag">記録なし</span>')+'</div>'
+      + '<div class="actions">'
+        + '<button class="iconbtn" data-act="edit" data-id="'+r.id+'">✎</button>'
+        + '<button class="iconbtn" data-act="del" data-id="'+r.id+'">🗑</button>'
+      + '</div></div>';
+  }).join('');
+  el.querySelectorAll('[data-act="edit"]').forEach(b=> b.onclick = ()=> openForm(b.dataset.id));
+  el.querySelectorAll('[data-act="del"]').forEach(b=> b.onclick = ()=> confirmDelete(b.dataset.id));
+}
+
+function seriesFor(key){
+  let arr;
+  if(key==='bp'){
+    arr = records.filter(r=>r.systolic!=null).map(r=>({date:r.date, value:r.systolic, value2:r.diastolic}));
+  } else {
+    arr = records.filter(r=>r[key]!=null).map(r=>({date:r.date, value:r[key]}));
+  }
+  return arr.sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+}
+
+function daysInMonth(y,m){ return new Date(y, m, 0).getDate(); }
+
+function monthsFrom(start){
+  const months = [];
+  const base = start.year*12 + (start.month-1);
+  for(let i=0;i<12;i++){
+    const totalM = base + i;
+    months.push({ year: Math.floor(totalM/12), month: (totalM%12)+1 });
+  }
+  return months;
+}
+
+function ymOf(ws){ return ws.year*12 + ws.month; }
+
+function shiftMonths(ws, delta){
+  const totalM = ws.year*12 + (ws.month-1) + delta;
+  return { year: Math.floor(totalM/12), month: (totalM%12)+1 };
+}
+
+function defaultWindow(){ return { year: new Date().getFullYear(), month: 1 }; }
+
+function clampToDefault(ws){
+  const def = defaultWindow();
+  return ymOf(ws) > ymOf(def) ? def : ws;
+}
+
+function earliestYM(){
+  if(records.length===0) return null;
+  let min = null;
+  records.forEach(r=>{
+    const [y,m] = r.date.split('-').map(Number);
+    const ym = y*12+m;
+    if(min===null || ym<min) min = ym;
+  });
+  return min;
+}
+
+function renderCharts(){
+  const grid = document.getElementById('chartGrid');
+  grid.innerHTML = '';
+  const months = monthsFrom(windowStart);
+
+  const label = document.getElementById('periodLabel');
+  label.textContent = months[0].year+'年'+months[0].month+'月 – '+months[11].year+'年'+months[11].month+'月';
+  const startYM = ymOf(months[0]);
+  const minYM = earliestYM();
+  const atDefault = ymOf(windowStart) >= ymOf(defaultWindow());
+  document.getElementById('prevPeriod').disabled = !(minYM!==null && minYM < startYM);
+  document.getElementById('prevYear').disabled = !(minYM!==null && minYM < startYM);
+  document.getElementById('nextPeriod').disabled = atDefault;
+  document.getElementById('nextYear').disabled = atDefault;
+
+  FIELD_META.forEach(meta=>{
+    const data = seriesFor(meta.key);
+    const inWindow = data.some(d=> monthPos(d.date, months)!=null);
+    const wrap = document.createElement('div');
+    wrap.className = 'card chart-card';
+    const color = getComputedStyle(document.documentElement).getPropertyValue(meta.varName).trim() || '#2563eb';
+    wrap.innerHTML = '<div class="chart-title"><span class="dot" style="background:'+color+'"></span>'+meta.label+' ('+meta.unit+')</div>';
+    if(!inWindow){
+      const e = document.createElement('div');
+      e.className = 'empty'; e.style.padding = '18px 4px';
+      e.textContent = 'この期間のデータがありません';
+      wrap.appendChild(e);
+      grid.appendChild(wrap);
+    } else {
+      const canvas = document.createElement('canvas');
+      canvas.height = 120;
+      wrap.appendChild(canvas);
+      grid.appendChild(wrap);
+      requestAnimationFrame(()=> drawChart(canvas, data, meta, months));
+    }
+  });
+}
+
+function monthPos(dateStr, months){
+  const [y,m,day] = dateStr.split('-').map(Number);
+  const idx = months.findIndex(mo=> mo.year===y && mo.month===m);
+  if(idx===-1) return null;
+  const dim = daysInMonth(y,m);
+  return idx + (day-1)/dim;
+}
+
+function niceNum(range, round){
+  if(range<=0) return 1;
+  const exponent = Math.floor(Math.log10(range));
+  const fraction = range / Math.pow(10, exponent);
+  let niceFraction;
+  if(round){
+    if(fraction < 1.5) niceFraction = 1;
+    else if(fraction < 3) niceFraction = 2;
+    else if(fraction < 7) niceFraction = 5;
+    else niceFraction = 10;
+  } else {
+    if(fraction <= 1) niceFraction = 1;
+    else if(fraction <= 2) niceFraction = 2;
+    else if(fraction <= 5) niceFraction = 5;
+    else niceFraction = 10;
+  }
+  return niceFraction * Math.pow(10, exponent);
+}
+
+function pickStep(base, range, maxTicks){
+  const mults = [1,2,5];
+  let magnitude = 1;
+  for(let iter=0; iter<40; iter++){
+    for(const m of mults){
+      const step = base*m*magnitude;
+      if(range/step <= maxTicks-1) return step;
+    }
+    magnitude *= 10;
+  }
+  return base*magnitude;
+}
+
+function niceScale(min, max, maxTicks, forceStep){
+  if(min===max){ min -= 1; max += 1; }
+  let step;
+  if(forceStep){
+    step = pickStep(forceStep, max-min, maxTicks);
+  } else {
+    const range = niceNum(max-min, false);
+    step = niceNum(range/(maxTicks-1), true);
+    if(step < 1) step = 1;
+  }
+  let niceMin = Math.floor(min/step)*step;
+  let niceMax = Math.ceil(max/step)*step;
+  if(niceMin >= min) niceMin -= step; // ぴったり端に接する場合だけ1目盛り分の余白を追加
+  if(niceMax <= max) niceMax += step;
+  niceMin = Math.max(0, niceMin); // 体重・血糖値・血圧・HbA1cはマイナスにならない
+  return {min:niceMin, max:niceMax, step};
+}
+
+function drawChart(canvas, data, meta, months){
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 260;
+  const cssH = canvas.height || 130;
+  canvas.width = w*dpr; canvas.height = cssH*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  const style = getComputedStyle(document.documentElement);
+  const lineColor = style.getPropertyValue(meta.varName).trim() || '#2563eb';
+  const subColor = style.getPropertyValue('--sub').trim() || '#888';
+  const dangerColor = style.getPropertyValue('--danger').trim() || '#dc2626';
+  const padL = 30, padR = 8, padT = 10, padB = 16;
+  const plotW = w - padL - padR, plotH = cssH - padT - padB;
+
+  const points = data.map(d=>({...d, pos: monthPos(d.date, months)})).filter(d=> d.pos!=null);
+
+  let vals = points.map(d=>d.value);
+  let vals2 = meta.key==='bp' ? points.map(d=>d.value2).filter(v=>v!=null) : [];
+  let allVals = vals.concat(vals2);
+  if(meta.refMin!=null) allVals = allVals.concat([meta.refMin, meta.refMax]);
+  let dataMin = allVals.length ? Math.min(...allVals) : 0;
+  let dataMax = allVals.length ? Math.max(...allVals) : 1;
+  const dynamicMaxTicks = Math.max(4, Math.min(8, Math.floor(plotH/13)));
+  const scale = niceScale(dataMin, dataMax, dynamicMaxTicks, meta.forceStep);
+  const min = scale.min, max = scale.max, step = scale.step;
+
+  ctx.clearRect(0,0,w,cssH);
+
+  function xAt(pos){ return padL + plotW * (pos/11); }
+  function yAt(v){ return padT + plotH - ( (v-min)/(max-min) )*plotH; }
+
+  // reference band (e.g. HbA1c normal range)
+  if(meta.refMin!=null){
+    ctx.fillStyle = lineColor; ctx.globalAlpha = .12;
+    ctx.fillRect(padL, yAt(meta.refMax), plotW, yAt(meta.refMin)-yAt(meta.refMax));
+    ctx.globalAlpha = 1;
+  }
+
+  // horizontal gridlines + integer y labels
+  ctx.strokeStyle = subColor; ctx.fillStyle = subColor; ctx.font = '8.5px sans-serif';
+  for(let v=min; v<=max+1e-9; v+=step){
+    const y = yAt(v);
+    ctx.globalAlpha = .18; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+plotW,y); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(v), padL-4, y+3);
+  }
+
+  // month gridlines + labels (fixed 12-month window)
+  months.forEach((mo,idx)=>{
+    const x = xAt(idx);
+    ctx.strokeStyle = subColor;
+    ctx.globalAlpha = (mo.month===1) ? .45 : .15;
+    ctx.lineWidth = (mo.month===1) ? 1.2 : 1;
+    ctx.setLineDash(mo.month===1 ? [] : [2,2]);
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT+plotH); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = subColor; ctx.font = '8px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(String(mo.month), x, cssH-4);
+  });
+
+  function drawLine(key2, color, checkRef){
+    const pts = points.filter(d=> (key2 ? d.value2 : d.value) != null)
+      .sort((a,b)=> a.pos-b.pos);
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+    pts.forEach((d,i)=>{
+      const v = key2 ? d.value2 : d.value;
+      const x = xAt(d.pos), y = yAt(v);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    pts.forEach(d=>{
+      const v = key2 ? d.value2 : d.value;
+      const x = xAt(d.pos), y = yAt(v);
+      const outOfRange = checkRef && meta.refMin!=null && (v < meta.refMin || v > meta.refMax);
+      ctx.fillStyle = outOfRange ? dangerColor : color;
+      ctx.beginPath(); ctx.arc(x,y,2.6,0,7); ctx.fill();
+    });
+  }
+  drawLine(false, lineColor, true);
+  if(meta.key==='bp') drawLine(true, '#94a3b8', false);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function exportCsv(){
+  if(records.length===0){ alert('書き出す記録がありません。'); return; }
+  const header = ['日付','体重(kg)','血糖値(mg/dL)','血圧_収縮期(mmHg)','血圧_拡張期(mmHg)','HbA1c(%)','メモ'];
+  const esc = (v)=>{
+    if(v==null) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  };
+  const sorted = [...records].sort((a,b)=> a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const rows = sorted.map(r=> [r.date, r.weight, r.glucose, r.systolic, r.diastolic, r.hba1c, r.note].map(esc).join(','));
+  const csv = '\uFEFF' + header.join(',') + '\n' + rows.join('\n') + '\n';
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'health-records-' + todayStr() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function parseCsvText(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else { inQuotes = false; }
+      } else { field += c; }
+    } else {
+      if(c === '"'){ inQuotes = true; }
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c === '\r'){ /* skip */ }
+      else { field += c; }
+    }
+  }
+  if(field.length>0 || row.length>0){ row.push(field); rows.push(row); }
+  return rows.filter(r=> r.some(v=>v!==''));
+}
+
+function importCsv(){
+  const input = document.getElementById('importFile');
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    let text = reader.result;
+    if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const rows = parseCsvText(text);
+    if(rows.length < 2){ alert('取り込める記録が見つかりませんでした。'); input.value=''; return; }
+    const dataRows = rows.slice(1);
+    const num = (v)=> (v===undefined || v==='') ? null : Number(v);
+    const imported = dataRows.map(r=>({
+      id: uid(),
+      date: r[0] || todayStr(),
+      weight: num(r[1]),
+      glucose: num(r[2]),
+      systolic: num(r[3]),
+      diastolic: num(r[4]),
+      hba1c: num(r[5]),
+      note: r[6] || '',
+      photoDataUrl: null,
+      createdAt: new Date().toISOString(),
+    })).filter(r=> r.date);
+    if(imported.length===0){ alert('取り込める記録が見つかりませんでした。'); input.value=''; return; }
+    if(!window.confirm(imported.length + '件の記録を取り込みます。よろしいですか？')){ input.value=''; return; }
+    records = records.concat(imported);
+    if(persist()){
+      renderList();
+      renderCharts();
+      alert(imported.length + '件を取り込みました。');
+    }
+    input.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function buildPrintableHtml(){
+  const dateStr = new Date().toLocaleDateString('ja-JP');
+  let html = '<h1 style="font-size:20px;margin:0 0 4px;">健康記録</h1>';
+  html += '<div style="font-size:12px;color:#555;margin-bottom:18px;">作成日: '+dateStr+'</div>';
+  html += '<h2 style="font-size:14px;margin:18px 0 8px;">グラフ</h2>';
+  const months = monthsFrom(windowStart);
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">';
+  FIELD_META.forEach(meta=>{
+    const data = seriesFor(meta.key);
+    const inWindow = data.some(d=> monthPos(d.date, months)!=null);
+    html += '<div style="border:1px solid #ddd;border-radius:8px;padding:8px;">';
+    html += '<div style="font-size:12px;font-weight:600;margin-bottom:4px;">'+meta.label+' ('+meta.unit+')</div>';
+    if(!inWindow){
+      html += '<div style="font-size:11px;color:#999;padding:20px 0;text-align:center;">この期間のデータがありません</div>';
+    } else {
+      html += '<canvas data-key="'+meta.key+'" width="340" height="150" style="width:100%;display:block;"></canvas>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<h2 style="font-size:14px;margin:22px 0 8px;">記録一覧</h2>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11px;">';
+  html += '<thead><tr style="background:#f2f2f2;">'
+    + ['日付','体重(kg)','血糖値(mg/dL)','血圧(mmHg)','HbA1c(%)','メモ'].map(h=>'<th style="border:1px solid #ddd;padding:5px;text-align:left;">'+h+'</th>').join('')
+    + '</tr></thead><tbody>';
+  const sorted = records
+    .filter(r=> monthPos(r.date, months)!=null)
+    .sort((a,b)=> a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+  sorted.forEach(r=>{
+    const bp = (r.systolic!=null||r.diastolic!=null) ? (r.systolic??'-')+'/'+(r.diastolic??'-') : '';
+    html += '<tr>'
+      + '<td style="border:1px solid #ddd;padding:5px;">'+escapeHtml(r.date)+'</td>'
+      + '<td style="border:1px solid #ddd;padding:5px;">'+(r.weight??'')+'</td>'
+      + '<td style="border:1px solid #ddd;padding:5px;">'+(r.glucose??'')+'</td>'
+      + '<td style="border:1px solid #ddd;padding:5px;">'+bp+'</td>'
+      + '<td style="border:1px solid #ddd;padding:5px;">'+(r.hba1c??'')+'</td>'
+      + '<td style="border:1px solid #ddd;padding:5px;">'+(r.note? escapeHtml(r.note):'')+'</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+async function exportPdf(){
+  if(records.length===0){ alert('出力する記録がありません。'); return; }
+  const btn = document.getElementById('pdfBtn');
+  const origLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = '作成中…';
+  const area = document.getElementById('printArea');
+  try{
+    area.innerHTML = buildPrintableHtml();
+    area.querySelectorAll('canvas[data-key]').forEach(canvas=>{
+      const key = canvas.dataset.key;
+      const meta = FIELD_META.find(m=>m.key===key);
+      drawChart(canvas, seriesFor(key), meta, monthsFrom(windowStart));
+    });
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+
+    if(!window.html2canvas || !window.jspdf){
+      alert('PDF機能の読み込みに失敗しました。ネット接続を確認してもう一度お試しください。');
+      return;
+    }
+    const canvasFull = await window.html2canvas(area, {scale:2, backgroundColor:'#ffffff', useCORS:true});
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({unit:'pt', format:'a4'});
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgW = pageW;
+    const imgH = canvasFull.height * (imgW / canvasFull.width);
+    const imgData = canvasFull.toDataURL('image/png');
+    let heightLeft = imgH;
+    let position = 0;
+    pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+    heightLeft -= pageH;
+    while(heightLeft > 0){
+      position = heightLeft - imgH;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+      heightLeft -= pageH;
+    }
+    pdf.save('health-records-' + todayStr() + '.pdf');
+  }catch(e){
+    console.error(e);
+    alert('PDFの作成に失敗しました。');
+  }finally{
+    area.innerHTML = '';
+    btn.disabled = false; btn.textContent = origLabel;
+  }
+}
+
+function confirmDelete(id){
+  const r = records.find(x=>x.id===id);
+  if(!r) return;
+  if(!window.confirm(r.date + ' の記録を削除しますか？')) return;
+  records = records.filter(x=>x.id!==id);
+  persist();
+  renderList();
+  renderCharts();
+}
+
+function openForm(id){
+  editingId = id;
+  const r = id ? records.find(x=>x.id===id) : null;
+  attachedPhotoDataUrl = r && r.photoDataUrl ? r.photoDataUrl : null;
+  const overlay = document.createElement('div');
+  overlay.className = 'overlay';
+  overlay.innerHTML = `
+    <div class="sheet">
+      <h3>${id ? '記録を編集' : '記録を追加'}</h3>
+      <label>日付</label>
+      <input type="date" id="f-date" value="${r ? r.date : todayStr()}">
+
+      <label>写真を添付(任意・参考用。自動読み取りはこの版では利用できません)</label>
+      <input type="file" id="f-photo" accept="image/*">
+      <img id="f-thumb" class="thumb" style="display:${attachedPhotoDataUrl?'block':'none'};" src="${attachedPhotoDataUrl||''}">
+
+      <div class="grid2">
+        <div><label>体重 (kg)</label><input type="number" step="0.1" id="f-weight" value="${r&&r.weight!=null?r.weight:''}"></div>
+        <div><label>血糖値 (mg/dL)</label><input type="number" step="1" id="f-glucose" value="${r&&r.glucose!=null?r.glucose:''}"></div>
+        <div><label>血圧 収縮期 (mmHg)</label><input type="number" step="1" id="f-sys" value="${r&&r.systolic!=null?r.systolic:''}"></div>
+        <div><label>血圧 拡張期 (mmHg)</label><input type="number" step="1" id="f-dia" value="${r&&r.diastolic!=null?r.diastolic:''}"></div>
+        <div><label>HbA1c (%)</label><input type="number" step="0.1" id="f-hba1c" value="${r&&r.hba1c!=null?r.hba1c:''}"></div>
+        <div><label>メモ</label><input type="text" id="f-note" value="${r&&r.note?r.note.replace(/"/g,'&quot;'):''}"></div>
+      </div>
+
+      <div class="btnrow">
+        <button class="secondary" id="f-cancel">キャンセル</button>
+        <button class="primary" id="f-save">保存</button>
+      </div>
+      ${id ? '<button class="deletebtn" id="f-delete">この記録を削除</button>' : ''}
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('focus', function(){
+      const el = this;
+      setTimeout(()=>{ try{ el.select(); }catch(e){} }, 0);
+    });
+  });
+
+  overlay.querySelector('#f-cancel').onclick = ()=> overlay.remove();
+  overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
+
+  const fileInput = overlay.querySelector('#f-photo');
+  fileInput.onchange = ()=>{
+    const file = fileInput.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      attachedPhotoDataUrl = reader.result;
+      const thumb = overlay.querySelector('#f-thumb');
+      thumb.src = attachedPhotoDataUrl;
+      thumb.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if(id){
+    overlay.querySelector('#f-delete').onclick = ()=>{
+      overlay.remove();
+      confirmDelete(id);
+    };
+  }
+
+  overlay.querySelector('#f-save').onclick = ()=>{
+    const date = overlay.querySelector('#f-date').value;
+    if(!date){ alert('日付を入力してください。'); return; }
+    const num = (sel)=>{ const v = overlay.querySelector(sel).value; return v===''? null : Number(v); };
+    const data = {
+      date,
+      weight: num('#f-weight'),
+      glucose: num('#f-glucose'),
+      systolic: num('#f-sys'),
+      diastolic: num('#f-dia'),
+      hba1c: num('#f-hba1c'),
+      note: overlay.querySelector('#f-note').value || '',
+      photoDataUrl: attachedPhotoDataUrl || null,
+    };
+    if(id){
+      const idx = records.findIndex(x=>x.id===id);
+      if(idx>-1) records[idx] = {...records[idx], ...data};
+    } else {
+      records.push({id: uid(), ...data, createdAt: new Date().toISOString()});
+    }
+    if(persist()){
+      overlay.remove();
+      renderList();
+      renderCharts();
+    }
+  };
+}
+
+init();
+</script>
+</body>
+</html>
