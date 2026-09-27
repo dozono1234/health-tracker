@@ -130,8 +130,7 @@ function uid(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).sl
 
 function getToken(){ return localStorage.getItem('gh_pat') || ''; }
 function setToken(t){ if(t) localStorage.setItem('gh_pat', t); else localStorage.removeItem('gh_pat'); }
-function getGistId(){ return GIST_ID || localStorage.getItem('gist_id_local') || ''; }
-function setGistIdLocal(id){ if(id) localStorage.setItem('gist_id_local', id); else localStorage.removeItem('gist_id_local'); }
+function getGistId(){ return GIST_ID; }
 function isEditor(){ return !!getToken(); }
 
 async function fetchGistRecords(){
@@ -166,17 +165,6 @@ async function saveGistRecords(){
   }
 }
 
-async function createNewGist(token){
-  const res = await fetch('https://api.github.com/gists', {
-    method:'POST',
-    headers:{ 'Authorization':'token '+token, 'Content-Type':'application/json' },
-    body: JSON.stringify({ description:'健康記録データ', public:false, files:{ [GIST_FILENAME]:{ content:'[]' } } })
-  });
-  if(!res.ok) throw new Error('gist create failed: '+res.status);
-  const data = await res.json();
-  return data.id;
-}
-
 function updateModeUI(){
   const editor = isEditor();
   document.getElementById('addBtn').style.display = editor ? 'block' : 'none';
@@ -188,19 +176,12 @@ function openSettings(){
   const overlay = document.createElement('div');
   overlay.className = 'overlay';
   const token = getToken();
-  const gistId = getGistId();
   overlay.innerHTML = `
     <div class="sheet">
-      <h3>設定(データの保存先)</h3>
+      <h3>設定</h3>
       <label>GitHub個人アクセストークン(scope: gist)</label>
       <input type="password" id="s-token" value="${token.replace(/"/g,'&quot;')}" placeholder="ghp_...">
       <div class="notice">入力すると、この端末で記録の追加・編集・削除ができます。空欄なら閲覧専用になります。</div>
-
-      <label style="margin-top:14px;">Gist ID</label>
-      <input type="text" id="s-gistid" value="${gistId.replace(/"/g,'&quot;')}" placeholder="未設定の場合は下のボタンで新規作成できます">
-      <div class="notice">${GIST_ID ? 'コードに固定済みです。' : 'まだコードには固定されていません(この端末だけの暫定設定です)。'}</div>
-
-      <button class="ghost" id="s-create">新しいGistを作成する(最初の1回だけ)</button>
 
       <div class="btnrow">
         <button class="secondary" id="s-cancel">キャンセル</button>
@@ -212,27 +193,9 @@ function openSettings(){
   overlay.querySelector('#s-cancel').onclick = ()=> overlay.remove();
   overlay.addEventListener('click', (e)=>{ if(e.target===overlay) overlay.remove(); });
 
-  overlay.querySelector('#s-create').onclick = async ()=>{
-    const t = overlay.querySelector('#s-token').value.trim();
-    if(!t){ alert('先にトークンを入力してください。'); return; }
-    const btn = overlay.querySelector('#s-create');
-    btn.disabled = true; btn.textContent = '作成中…';
-    try{
-      const newId = await createNewGist(t);
-      overlay.querySelector('#s-gistid').value = newId;
-      alert('作成しました。Gist ID: '+newId+'\n\nこのIDをコード内のGIST_IDに固定してもらうと、全端末共通の保存先になります。固定するまでは、この端末だけの設定として使えます。');
-    }catch(e){
-      alert('作成に失敗しました。トークンの権限(gist)を確認してください。');
-    }finally{
-      btn.disabled = false; btn.textContent = '新しいGistを作成する(最初の1回だけ)';
-    }
-  };
-
   overlay.querySelector('#s-save').onclick = async ()=>{
     const t = overlay.querySelector('#s-token').value.trim();
-    const g = overlay.querySelector('#s-gistid').value.trim();
     setToken(t);
-    if(!GIST_ID) setGistIdLocal(g);
     overlay.remove();
     updateModeUI();
     document.getElementById('listCard').innerHTML = '<div class="empty">読み込み中…</div>';
